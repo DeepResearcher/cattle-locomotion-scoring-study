@@ -41,6 +41,8 @@ Credentials are generated in `../private/server_credentials.local.json`; deploy 
 
 Once deployed, set `LCS_API_URL` in the GitHub repository Actions variables to the HTTPS Worker origin. GitHub Actions publishes only `dist/`.
 
+After R2 activation, create the private EU bucket and upload the final verified web copies with `tools/upload-media.ps1 -SharingPermissionConfirmed`. This tool uses the `cf` CLI and records uploaded hashes privately. It does not enable public R2 access. The frontend Content Security Policy must match the API origin if deployment moves to another account or domain.
+
 ## Administration
 
 Set `LCS_API_URL` in your local shell to the deployed API origin before these commands. Without it, administration targets the local preview, not production.

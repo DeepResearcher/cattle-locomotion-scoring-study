@@ -28,7 +28,8 @@ if(command==='seed') {
   const count=Number(process.argv[3] || 1);
   if(!Number.isInteger(count)||count<1||count>100) throw new Error('Count must be 1 to 100.');
   const isTest=process.argv.includes('--test');
-  const file=path.join(PRIVATE,`invitations-${isTest?'preview':'participants'}.local.json`);
+  const scope=/^http:\/\/(127\.0\.0\.1|localhost):/.test(endpoint)?'':'production-';
+  const file=path.join(PRIVATE,`invitations-${scope}${isTest?'preview':'participants'}.local.json`);
   let existing=[];try{existing=JSON.parse(await fs.readFile(file,'utf8'));}catch{}
   for(let i=0;i<count;i++) {
     const label=`${isTest?'Preview':'Participant'} ${String(existing.length+1).padStart(2,'0')}`;

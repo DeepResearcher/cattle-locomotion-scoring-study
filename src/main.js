@@ -111,6 +111,7 @@ function updateForm() {
 async function loadClip() {
   const load=++S.loadNumber, clip=S.study.clips[S.index], form=document.querySelector('#rating-form'), video=document.querySelector('#video');
   S.dirty=false; S.viewed=false; S.watched=0; S.lastTime=0; form.reset();
+  document.querySelector('#speed').value='1'; video.playbackRate=1; video.defaultPlaybackRate=1;
   video.pause(); video.removeAttribute('src'); video.removeAttribute('poster'); video.load();
   document.querySelector('#viewed').textContent='';
   document.querySelector('#video-error').textContent='';
