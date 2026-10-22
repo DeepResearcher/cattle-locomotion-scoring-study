@@ -6,6 +6,11 @@ import assert from 'node:assert/strict';
 const STUDY=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const secrets=JSON.parse(await fs.readFile(path.join(STUDY,'private/server_credentials.local.json'),'utf8'));
 const endpoint=process.env.LCS_API_URL || 'https://paper3-lcs-rating-api.serhan-narli.workers.dev';
+let mediaVerified=false;
+try {
+  const media=JSON.parse(await fs.readFile(path.join(STUDY,'reports/Production_Media_Verification.json'),'utf8'));
+  mediaVerified=media.passed===true && media.endpoint===endpoint && media.objects===152;
+} catch(error) {if(error.code!=='ENOENT') throw error;}
 async function request(resource,{method='GET',token,data}={}) {
   const response=await fetch(`${endpoint}/api${resource}`,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:data?JSON.stringify(data):undefined});
   return {status:response.status,data:await response.json()};
@@ -28,7 +33,7 @@ try {
   const row=exported.data.ratings.find(r=>r.rater_id===invite.data.id);
   assert.equal(row.is_test,1);
   assert.ok(exported.data.history.find(h=>h.rater_id===invite.data.id));
-  await fs.writeFile(path.join(STUDY,'reports/Production_API_Verification.json'),JSON.stringify({passed:true,endpoint,study_open:health.data.open,manifest_clips:76,unauthenticated_access_blocked:true,central_d1_save_confirmed:true,save_survives_new_login:true,test_data_explicitly_flagged:true,checked_at:new Date().toISOString(),video_storage_verified:false},null,2));
+  await fs.writeFile(path.join(STUDY,'reports/Production_API_Verification.json'),JSON.stringify({passed:true,endpoint,study_open:health.data.open,manifest_clips:76,unauthenticated_access_blocked:true,central_d1_save_confirmed:true,save_survives_new_login:true,test_data_explicitly_flagged:true,checked_at:new Date().toISOString(),video_storage_verified:mediaVerified,video_storage_verification_source:mediaVerified?'Production_Media_Verification.json':null},null,2));
   console.log('Production API verified: 76 blinded clips, authenticated central save and resume. Test participant excluded and revoked.');
 } finally {
   assert.equal((await request('/admin/revoke',{method:'POST',token:secrets.ADMIN_SECRET,data:{id:invite.data.id}})).status,200);
