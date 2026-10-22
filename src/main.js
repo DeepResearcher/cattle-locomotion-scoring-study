@@ -74,7 +74,15 @@ function render() {
   document.querySelector('#replay').onclick=()=>{video.currentTime=0; video.play().catch(()=>{});};
   document.querySelector('#speed').onchange=e=>{video.playbackRate=Number(e.target.value);};
   video.onloadeddata=()=>{document.querySelector('#video-message').hidden=true;};
-  video.onerror=()=>{document.querySelector('#video-message').hidden=false; document.querySelector('#video-message').textContent='Recording unavailable'; document.querySelector('#video-error').textContent='The video could not be loaded. Please try again later or contact the researcher.';};
+  video.onerror=()=>{
+    document.querySelector('#video-message').hidden=false;
+    document.querySelector('#video-message').textContent='Recording unavailable';
+    const message=document.querySelector('#video-error');
+    message.textContent='The video could not be loaded. Retry or contact the researcher. ';
+    const retry=document.createElement('button');retry.type='button';retry.className='icon-button';
+    retry.title='Reload recording';retry.setAttribute('aria-label','Reload recording');retry.innerHTML=icon('rotate-ccw');
+    retry.onclick=()=>{if(S.dirty)saveDraft();loadClip();};message.append(retry);activateIcons();
+  };
   video.ontimeupdate=()=>{
     const delta=video.currentTime-S.lastTime;
     if (!video.paused && delta>0 && delta<1.5) S.watched+=delta;

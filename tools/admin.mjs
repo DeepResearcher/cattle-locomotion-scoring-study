@@ -44,7 +44,11 @@ if(command==='seed') {
   await fs.writeFile(path.join(dir,`${stem}.json`),JSON.stringify(value,null,2));
   const rows=value.ratings.filter(r=>!r.is_test);
   const fields=['rater_id','label','clip_id','score','unscorable','reason','confidence','notes','watched_seconds','playback_rate','revision','updated_at','study_version','role','experience','consent_at'];
-  const quote=x=>'"'+String(x??'').replace(/"/g,'""')+'"';
+  const quote=x=>{
+    const text=String(x??'');
+    const safe=typeof x==='string' && /^[=+\-@\t\r]/.test(text)?"'"+text:text;
+    return '"'+safe.replace(/"/g,'""')+'"';
+  };
   await fs.writeFile(path.join(dir,`${stem}.csv`),'\ufeff'+[fields,...rows.map(r=>fields.map(k=>r[k]))].map(r=>r.map(quote).join(',')).join('\r\n'));
   console.log(`Exported ${rows.length} non-test ratings and full audit history: ${dir}`);
 } else if(command==='revoke') {
