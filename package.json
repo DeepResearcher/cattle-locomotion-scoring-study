@@ -1,0 +1,24 @@
+{
+  "name": "paper3-lcs-rating-study",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5178",
+    "build": "vite build",
+    "test": "node --test tests/api.test.mjs",
+    "preview": "vite preview --host 127.0.0.1 --port 5178",
+    "api:local": "node tools/local-api.mjs",
+    "admin": "node tools/admin.mjs"
+  },
+  "dependencies": {
+    "lucide": "1.61.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^2.0.0-beta.v.3",
+    "@playwright/test": "^1.56.0",
+    "cf": "1.0.0-beta.10",
+    "miniflare": "4.20260730.0",
+    "vite": "^7.1.0"
+  }
+}
