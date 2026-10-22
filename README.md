@@ -53,6 +53,10 @@ After R2 activation, create the private EU bucket and upload the final verified 
 
 ## Administration
 
+Open `/admin.html` for the German/English results page. Owner access details are generated outside this repository by `node tools/prepare-admin-access.mjs`, in `../private/Admin_Access.local.json`. The participant code cannot access results. The administrator key is exchanged for a one-hour read-only token, kept only in page memory; signing out or reloading requires signing in again. No credentials are placed in URLs or browser storage.
+
+The page shows participant progress, submitted ratings (including unable-to-score responses), completed assessments and coverage per clip. CSV and JSON downloads follow the current participant filter. Test participants, ratings and revision history are excluded by default. The explicit test-data checkbox includes them and marks the download filename accordingly. JSON also preserves revision history; CSV has one row per current participant/clip assessment, not one row per revision. Participant counts are browser enrolments, not verified unique people; clip counts must not be interpreted as cow counts. No accuracy or agreement statistic is inferred without a clinical reference and the private cow/clip mapping. Refresh retrieves the latest central records without modifying them.
+
 Set `LCS_API_URL` in your local shell to the deployed API origin before these commands. Without it, administration targets the local preview, not production.
 
 ```powershell

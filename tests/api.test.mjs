@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {Miniflare} from 'miniflare';
 import fs from 'node:fs/promises';
+import {createHmac} from 'node:crypto';
 
 test('access control, blinded manifest, independent ratings, revisions and private media',async()=>{
   const mf=new Miniflare({scriptPath:new URL('../worker/index.js',import.meta.url).pathname.replace(/^\/([A-Z]:)/,'$1'),modules:true,compatibilityDate:'2026-07-01',
@@ -65,6 +66,34 @@ async function sharedHarness(open=true) {
   };
   return {mf,db,call,admin:'test-shared-admin-secret'};
 }
+
+test('Administrator results sessions are short-lived and read-only; participant access cannot read results',async()=>{
+  const {mf,db,call,admin}=await sharedHarness();
+  try {
+    assert.equal((await call('/admin/session',{method:'POST'})).status,401);
+    const access=(await call('/admin/shared-access',{token:admin,data:{}})).data;
+    assert.equal((await call('/admin/session',{method:'POST',token:access.code})).status,401);
+    const participant=(await call('/session',{data:{code:access.code,participant_key:'a'.repeat(64),consent:true,role:'Veterinarian',experience:'More than 5 years'}})).data;
+    assert.equal((await call('/admin/export',{token:participant.token})).status,401);
+    const session=await call('/admin/session',{token:admin,method:'POST'});
+    assert.equal(session.status,200);
+    const {token,expires}=session.data;
+    assert.ok(token.startsWith('readonly.'));assert.ok(expires<=Date.now()/1000+3600);
+    const exported=await call('/admin/export',{token});
+    assert.equal(exported.status,200);assert.deepEqual(exported.data.clips,[]);
+    assert.ok(!JSON.stringify(exported.data).includes('code_hash'));
+    assert.equal((await call('/admin/invite',{token,data:{label:'Must not be created'}})).status,401);
+    assert.equal((await call('/admin/session',{token,method:'POST'})).status,401);
+    assert.equal((await call('/study',{token})).status,401);
+    assert.equal((await call('/admin/export',{token:token.slice(0,-1)+(token.endsWith('a')?'b':'a')})).status,401);
+    const expired=`readonly.${Math.floor(Date.now()/1000)-10}.${'a'.repeat(32)}`;
+    const signed=`${expired}.${createHmac('sha256',admin).update(`shared-test:${expired}`).digest('hex')}`;
+    assert.equal((await call('/admin/export',{token:signed})).status,401);
+    assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM raters').first()).n,1);
+    for(let i=0;i<21;i++) await call('/admin/session',{token:'invalid',method:'POST'});
+    assert.equal((await call('/admin/session',{token:admin,method:'POST'})).status,429);
+  } finally {await mf.dispose();}
+});
 
 test('One common code isolates browser participants and preserves individual preview access',async()=>{
   const {mf,db,call,admin}=await sharedHarness();

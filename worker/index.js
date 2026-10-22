@@ -37,6 +37,15 @@ async function admin(request, env) {
   const token = request.headers.get('authorization')?.replace(/^Bearer /, '') || '';
   if (!env.ADMIN_SECRET || !constantEqual(await sha(token), await sha(env.ADMIN_SECRET))) fail(401, 'Unauthorized.');
 }
+async function readAdmin(request, env) {
+  const token=request.headers.get('authorization')?.replace(/^Bearer /,'') || '';
+  if (!token.startsWith('readonly.')) return admin(request,env);
+  const match=/^readonly\.(\d{10})\.([a-f0-9]{32})\.([a-f0-9]{64})$/.exec(token);
+  const now=Math.floor(Date.now()/1000);
+  if (!match || !env.ADMIN_SECRET || Number(match[1])<=now || Number(match[1])>now+3600) fail(401,'Unauthorized.');
+  const value=token.slice(0,token.lastIndexOf('.'));
+  if (!constantEqual(match[3],await mac(env.ADMIN_SECRET,`${env.STUDY_ID}:${value}`))) fail(401,'Unauthorized.');
+}
 function consentDetails(data) {
   if (data.consent!==true || !['Veterinarian','Researcher','Farmer / hoof care professional','Student','Other'].includes(data.role) || !['Less than 1 year','1 to 5 years','More than 5 years'].includes(data.experience)) fail(400,'Please complete consent and experience details.');
 }
@@ -44,7 +53,18 @@ async function route(request, env) {
   const url = new URL(request.url), path = url.pathname.replace(/^\/api/, '');
   if (path === '/health' && request.method === 'GET') return json({ok:true, open:env.STUDY_OPEN === 'true'});
   if (path.startsWith('/admin/')) {
-    await admin(request, env);
+    if (path==='/admin/session' && request.method==='POST') {
+      const now=Math.floor(Date.now()/1000),ip=request.headers.get('cf-connecting-ip') || 'local';
+      const key=await mac(env.AUTH_SECRET,`admin-login:${ip}:${Math.floor(now/600)}`);
+      await env.DB.prepare('INSERT INTO login_limits VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1').bind(key,now+600).run();
+      const limit=await env.DB.prepare('SELECT attempts FROM login_limits WHERE key=?').bind(key).first();
+      if (limit.attempts>20) fail(429,'Too many attempts. Please wait 10 minutes.');
+      await admin(request,env);
+      const expires=now+3600,value=`readonly.${expires}.${hex(crypto.getRandomValues(new Uint8Array(16)))}`;
+      return json({token:`${value}.${await mac(env.ADMIN_SECRET,`${env.STUDY_ID}:${value}`)}`,expires});
+    }
+    if (path==='/admin/export' && request.method==='GET') await readAdmin(request,env);
+    else await admin(request, env);
     if (path === '/admin/shared-access' && request.method === 'GET') {
       const access=(await env.DB.prepare('SELECT id,active,is_test,created_at FROM shared_access WHERE study_id=?').bind(env.STUDY_ID).all()).results;
       return json({access});
@@ -92,7 +112,8 @@ async function route(request, env) {
       const ratings = (await env.DB.prepare('SELECT t.*,r.label,r.role,r.experience,r.is_test,r.consent_at FROM ratings t JOIN raters r ON r.id=t.rater_id ORDER BY t.rater_id,t.clip_id').all()).results;
       const history = (await env.DB.prepare('SELECT h.* FROM rating_history h ORDER BY h.id').all()).results;
       const raters = (await env.DB.prepare('SELECT id,label,active,is_test,role,experience,consent_at FROM raters').all()).results;
-      return json({study_id:env.STUDY_ID,exported_at:new Date().toISOString(),ratings,history,raters});
+      const manifest=(await clips(env)).map(({id,version,duration})=>({id,version,duration}));
+      return json({study_id:env.STUDY_ID,exported_at:new Date().toISOString(),clips:manifest,ratings,history,raters});
     }
     fail(404, 'Not found.');
   }
