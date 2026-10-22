@@ -22,7 +22,7 @@ async function call(resource,data) {
   return value;
 }
 if(command==='seed') {
-  const manifest=JSON.parse(await fs.readFile(path.join(PRIVATE,'study_manifest.json'),'utf8'));
+  const manifest=JSON.parse(await fs.readFile(path.join(PRIVATE,'rating_manifest.json'),'utf8'));
   console.log(await call('clips',{clips:manifest.clips}));
 } else if(command==='invite') {
   const count=Number(process.argv[3] || 1);

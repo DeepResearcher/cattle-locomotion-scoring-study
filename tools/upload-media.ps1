@@ -4,9 +4,9 @@ if (!$SharingPermissionConfirmed) { throw 'Confirm restricted sharing permission
 $env:NODE_TLS_REJECT_UNAUTHORIZED='1'
 $study=Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $private=Join-Path $study 'private'
-$verification=Get-Content -LiteralPath (Join-Path $study 'reports\Export_Verification.json') -Raw | ConvertFrom-Json
-if (!$verification.completed -or $verification.raw_clips -ne 76) { throw 'The full clip export has not passed verification.' }
-$manifest=Get-Content -LiteralPath (Join-Path $private 'study_manifest.json') -Raw | ConvertFrom-Json
+$verification=Get-Content -LiteralPath (Join-Path $study 'reports\Rating_Context_Verification.json') -Raw | ConvertFrom-Json
+if (!$verification.completed -or $verification.rating_clips -ne 76) { throw 'The full rating clip export has not passed verification.' }
+$manifest=Get-Content -LiteralPath (Join-Path $private 'rating_manifest.json') -Raw | ConvertFrom-Json
 $ledgerFile=Join-Path $private 'r2_upload_ledger.local.json'
 $ledger=@{}
 if (Test-Path -LiteralPath $ledgerFile) {
@@ -16,7 +16,7 @@ if (Test-Path -LiteralPath $ledgerFile) {
 foreach ($clip in $manifest.clips) {
   foreach ($extension in @('mp4','jpg')) {
     $key=$clip.id+'.'+$extension
-    $file=Join-Path (Join-Path $private 'web_media') $key
+    $file=Join-Path (Join-Path $private 'rating_web_media') $key
     $hash=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
     if ($ledger.ContainsKey($key) -and $ledger[$key] -eq $hash) { continue }
     $contentType=if ($extension -eq 'mp4') { 'video/mp4' } else { 'image/jpeg' }
