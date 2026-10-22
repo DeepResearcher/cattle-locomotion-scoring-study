@@ -35,6 +35,10 @@ npm run build
 
 Use the `cf` CLI with `backend/cloudflare.config.ts`. The R2 service must first be enabled by the account owner. An EU-jurisdiction D1 database has been allocated; the intended private R2 bucket is also EU-jurisdiction.
 
+Production is hosted in Serhan's Cloudflare account. The local `posemetric` auth profile is bound to this project in addition to its existing bindings. Confirm the account with `cf auth whoami` before deployment. The default login belongs to a different account and must not be used for this study. Explicit deployment commands may use `--profile posemetric`.
+
+The production API is `https://paper3-lcs-rating-api.serhan-narli.workers.dev`. The earlier `aaaf-ev` deployment is not the active study. Video uploads use an explicit account and an account-specific hash ledger so a completed upload in another account cannot be mistaken for this account's inventory.
+
 `STUDY_OPEN` defaults to false. Do not open recruitment until the entire manifest, all media, permissions, study information and browser playback have been checked. `LCS_WITH_MEDIA=true` binds the private bucket; `LCS_STUDY_OPEN=true` opens participant access at deployment. Never open the study with a partial or changed manifest.
 
 Credentials are generated in `../private/server_credentials.local.json`; deploy these as Worker secrets, not environment variables embedded in the frontend. The backend and frontend have separate builds.

@@ -1,12 +1,12 @@
 import { bindings, defineConfig } from 'cf/config';
 export default defineConfig({
-  accountId: 'abcc8515822b473a126db67500a990e4',
+  accountId: 'cb0df0b951dfb3d3182518ae9ad7618e',
   worker: {
     name: 'paper3-lcs-rating-api',
     entrypoint: '../worker/index.js',
     compatibilityDate: '2026-10-22',
     env: {
-      DB: bindings.d1({id: '4b2e62be-ca93-42dd-ae66-f3cbdbbb22e0'}),
+      DB: bindings.d1({id: 'd538ee7d-54ab-409a-9084-a18ca7c38029'}),
       MEDIA: process.env.LCS_WITH_MEDIA === 'true' ? bindings.r2({name: 'paper3-lcs-private-20261022', jurisdiction: 'eu'}) : undefined,
       AUTH_SECRET: bindings.secret(),
       ADMIN_SECRET: bindings.secret(),

@@ -2,12 +2,20 @@ param([Parameter(Mandatory=$true)][switch]$SharingPermissionConfirmed)
 $ErrorActionPreference='Stop'
 if (!$SharingPermissionConfirmed) { throw 'Confirm restricted sharing permission before uploading.' }
 $env:NODE_TLS_REJECT_UNAUTHORIZED='1'
+$account='cb0df0b951dfb3d3182518ae9ad7618e'
+$profile='posemetric'
+$bucket='paper3-lcs-private-20261022'
+$env:CLOUDFLARE_ACCOUNT_ID=$account
+$identity=(& cf auth whoami --profile $profile -q | ConvertFrom-Json)
+if ($LASTEXITCODE -ne 0 -or !(@($identity.accounts.id) -contains $account)) {
+  throw 'Upload requires the confirmed Serhan Cloudflare account.'
+}
 $study=Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $private=Join-Path $study 'private'
 $verification=Get-Content -LiteralPath (Join-Path $study 'reports\Rating_Context_Verification.json') -Raw | ConvertFrom-Json
 if (!$verification.completed -or $verification.rating_clips -ne 76) { throw 'The full rating clip export has not passed verification.' }
 $manifest=Get-Content -LiteralPath (Join-Path $private 'rating_manifest.json') -Raw | ConvertFrom-Json
-$ledgerFile=Join-Path $private 'r2_upload_ledger.local.json'
+$ledgerFile=Join-Path $private ('r2_upload_'+$account+'_'+$bucket+'.local.json')
 $ledger=@{}
 if (Test-Path -LiteralPath $ledgerFile) {
   $saved=Get-Content -LiteralPath $ledgerFile -Raw | ConvertFrom-Json
@@ -20,8 +28,13 @@ foreach ($clip in $manifest.clips) {
     $hash=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
     if ($ledger.ContainsKey($key) -and $ledger[$key] -eq $hash) { continue }
     $contentType=if ($extension -eq 'mp4') { 'video/mp4' } else { 'image/jpeg' }
-    $result=& cf r2 objects put $key --bucket-name paper3-lcs-private-20261022 --cf-r2-jurisdiction eu --content-type $contentType --file $file -q 2>&1
-    if ($LASTEXITCODE -ne 0) { throw ($result -join "`n") }
+    $previousPreference=$ErrorActionPreference
+    try {
+      $ErrorActionPreference='Continue'
+      $result=& cf r2 objects put $key --profile $profile --bucket-name $bucket --cf-r2-jurisdiction eu --content-type $contentType --file $file -q 2>&1
+      $uploadExitCode=$LASTEXITCODE
+    } finally { $ErrorActionPreference=$previousPreference }
+    if ($uploadExitCode -ne 0) { throw ($result -join "`n") }
     $ledger[$key]=$hash
     $ledger | ConvertTo-Json | Set-Content -LiteralPath $ledgerFile -Encoding UTF8
     Write-Output ('Uploaded private object '+$key+' ('+$ledger.Count+'/152)')

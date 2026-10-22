@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 
 const STUDY=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const secrets=JSON.parse(await fs.readFile(path.join(STUDY,'private/server_credentials.local.json'),'utf8'));
-const endpoint=process.env.LCS_API_URL || 'https://paper3-lcs-rating-api.aaaf-ev.workers.dev';
+const endpoint=process.env.LCS_API_URL || 'https://paper3-lcs-rating-api.serhan-narli.workers.dev';
 async function request(resource,{method='GET',token,data}={}) {
   const response=await fetch(`${endpoint}/api${resource}`,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:data?JSON.stringify(data):undefined});
   return {status:response.status,data:await response.json()};
