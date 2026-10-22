@@ -9,7 +9,10 @@ export const messages = {
     signOut: 'Abmelden',
     restricted: 'Zugang nur mit Einladung',
     studyAccess: 'Studienzugang',
-    accessCode: 'Pers\u00f6nlicher Zugangscode',
+    accessCode: 'Zugangscode zur Studie',
+    newParticipant: 'Neue Teilnahme',
+    existingParticipant: 'Teilnahme fortsetzen: {participant}',
+    newParticipantConfirm: 'Eine neue Teilnahme beginnen? Gespeicherte Bewertungen bleiben erhalten, aber der Zugang zur bisherigen Teilnahme wird aus diesem Browser entfernt.',
     background: 'Beruflicher Hintergrund',
     selectBackground: 'Hintergrund ausw\u00e4hlen',
     experience: 'Erfahrung mit Gangbeurteilung',
@@ -84,7 +87,10 @@ export const messages = {
     signOut: 'Sign out',
     restricted: 'Restricted study',
     studyAccess: 'Study Access',
-    accessCode: 'Personal access code',
+    accessCode: 'Study access code',
+    newParticipant: 'New participant',
+    existingParticipant: 'Resume participant: {participant}',
+    newParticipantConfirm: 'Start a new participant? Saved ratings will remain, but this browser will no longer retain access to the previous participant.',
     background: 'Professional background',
     selectBackground: 'Select background',
     experience: 'Locomotion scoring experience',
@@ -174,6 +180,7 @@ export const optionLabels = {
 };
 
 const germanErrors = {
+  'Browser participant identity is missing. Please reload the page.': 'Die Browserkennung fehlt. Bitte laden Sie die Seite neu.',
   'The server did not return a valid response.': 'Der Server hat keine g\u00fcltige Antwort gesendet.',
   'Request failed.': 'Die Anfrage ist fehlgeschlagen.',
   'Failed to fetch': 'Die Verbindung zum Server ist fehlgeschlagen.',

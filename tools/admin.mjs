@@ -21,7 +21,22 @@ async function call(resource,data) {
   if(!response.ok) throw new Error(`${response.status}: ${value.error}`);
   return value;
 }
-if(command==='seed') {
+if(command==='shared-code') {
+  const local=/^http:\/\/(127\.0\.0\.1|localhost):/.test(endpoint);
+  const file=path.join(PRIVATE,local?'Shared_Study_Access_Local.local.json':'Shared_Study_Access.local.json');
+  let existing;
+  try {existing=JSON.parse(await fs.readFile(file,'utf8'));} catch(error) {if(error.code!=='ENOENT')throw error;}
+  if(existing) {
+    if(existing.endpoint!==endpoint)throw new Error('Existing shared code belongs to a different endpoint.');
+    const {access}=await call('shared-access');
+    if(!access.some(row=>row.id===existing.id && row.active && !row.is_test))throw new Error('The saved shared code is not active.');
+    console.log(`Existing common study code retained privately: ${file}`);
+  } else {
+    const value=await call('shared-access',{is_test:false});
+    await fs.writeFile(file,JSON.stringify({id:value.id,endpoint,website:local?'http://127.0.0.1:5178/':'https://deepresearcher.github.io/cattle-locomotion-scoring-study/',shared_access_code:value.code.match(/.{1,4}/g).join('-'),created_at:new Date().toISOString(),note:'Share this one study code only with authorised raters. Each browser keeps a separate participant identity. Use the same browser to resume. On a shared device, choose New participant for a different rater. Owner preview uses its existing separate test code.'},null,2),{mode:0o600});
+    console.log(`Common study code saved privately: ${file}`);
+  }
+} else if(command==='seed') {
   const manifest=JSON.parse(await fs.readFile(path.join(PRIVATE,'rating_manifest.json'),'utf8'));
   console.log(await call('clips',{clips:manifest.clips}));
 } else if(command==='invite') {
@@ -54,4 +69,4 @@ if(command==='seed') {
 } else if(command==='revoke') {
   if(!process.argv[3]) throw new Error('Provide the participant ID from the private invitation file.');
   console.log(await call('revoke',{id:process.argv[3]}));
-} else throw new Error('Commands: init, seed, invite [count] [--test], export, revoke <participant-id>');
+} else throw new Error('Commands: init, shared-code, seed, invite [count] [--test], export, revoke <participant-id>');

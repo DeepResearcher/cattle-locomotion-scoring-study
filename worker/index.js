@@ -25,7 +25,7 @@ async function session(request, env, tokenHash) {
   const token = request.headers.get('authorization')?.replace(/^Bearer /, '');
   if (!tokenHash && !/^[a-f0-9]{64}$/.test(token || '')) fail(401, 'Please sign in again.');
   const hash = tokenHash || await sha(token);
-  const row = await env.DB.prepare('SELECT s.rater_id,s.expires,r.label,r.is_test FROM sessions s JOIN raters r ON r.id=s.rater_id WHERE s.token_hash=? AND r.active=1 AND s.expires>?')
+  const row = await env.DB.prepare('SELECT s.rater_id,s.expires,r.label,r.is_test FROM sessions s JOIN raters r ON r.id=s.rater_id LEFT JOIN shared_participants p ON p.rater_id=r.id LEFT JOIN shared_access a ON a.id=p.access_id WHERE s.token_hash=? AND r.active=1 AND s.expires>? AND (p.access_id IS NULL OR a.active=1)')
     .bind(hash, Math.floor(Date.now()/1000)).first();
   if (!row) fail(401, 'Please sign in again.');
   return {...row, tokenHash: hash};
@@ -37,11 +37,30 @@ async function admin(request, env) {
   const token = request.headers.get('authorization')?.replace(/^Bearer /, '') || '';
   if (!env.ADMIN_SECRET || !constantEqual(await sha(token), await sha(env.ADMIN_SECRET))) fail(401, 'Unauthorized.');
 }
+function consentDetails(data) {
+  if (data.consent!==true || !['Veterinarian','Researcher','Farmer / hoof care professional','Student','Other'].includes(data.role) || !['Less than 1 year','1 to 5 years','More than 5 years'].includes(data.experience)) fail(400,'Please complete consent and experience details.');
+}
 async function route(request, env) {
   const url = new URL(request.url), path = url.pathname.replace(/^\/api/, '');
   if (path === '/health' && request.method === 'GET') return json({ok:true, open:env.STUDY_OPEN === 'true'});
   if (path.startsWith('/admin/')) {
     await admin(request, env);
+    if (path === '/admin/shared-access' && request.method === 'GET') {
+      const access=(await env.DB.prepare('SELECT id,active,is_test,created_at FROM shared_access WHERE study_id=?').bind(env.STUDY_ID).all()).results;
+      return json({access});
+    }
+    if (path === '/admin/shared-access' && request.method === 'POST') {
+      const data=await body(request),id=crypto.randomUUID();
+      const code=hex(crypto.getRandomValues(new Uint8Array(12))).toUpperCase();
+      await env.DB.prepare('INSERT INTO shared_access (id,study_id,code_hash,is_test,created_at) VALUES(?,?,?,?,?)')
+        .bind(id,env.STUDY_ID,await mac(env.AUTH_SECRET,code),data.is_test===true?1:0,new Date().toISOString()).run();
+      return json({id,code,is_test:data.is_test===true});
+    }
+    if (path === '/admin/revoke-shared-access' && request.method === 'POST') {
+      const data=await body(request);
+      await env.DB.prepare('UPDATE shared_access SET active=0 WHERE id=? AND study_id=?').bind(String(data.id),env.STUDY_ID).run();
+      return json({ok:true});
+    }
     if (path === '/admin/clips' && request.method === 'POST') {
       const data = await body(request);
       if (!Array.isArray(data.clips) || !data.clips.length || data.clips.length>250) fail(400, 'Invalid manifest.');
@@ -87,11 +106,35 @@ async function route(request, env) {
     if (limit.attempts>20) fail(429, 'Too many attempts. Please wait 10 minutes.');
     const code = String(data.code || '').replace(/[\s-]/g,'').toUpperCase();
     if (!/^[A-F0-9]{24}$/.test(code)) fail(401, 'Access code not recognised.');
-    const rater = await env.DB.prepare('SELECT * FROM raters WHERE code_hash=? AND active=1').bind(await mac(env.AUTH_SECRET,code)).first();
-    if (!rater) fail(401, 'Access code not recognised.');
+    const codeHash=await mac(env.AUTH_SECRET,code);
+    const access=await env.DB.prepare('SELECT * FROM shared_access WHERE code_hash=? AND study_id=? AND active=1').bind(codeHash,env.STUDY_ID).first();
+    let rater;
+    if (access) {
+      if (!/^[a-f0-9]{64}$/.test(data.participant_key || '')) fail(400,'Browser participant identity is missing. Please reload the page.');
+      if (env.STUDY_OPEN !== 'true' && !access.is_test) fail(503,'The study is not open yet. Please contact the researcher.');
+      const participantHash=await mac(env.AUTH_SECRET,`shared-participant:${access.id}:${data.participant_key}`);
+      rater=await env.DB.prepare('SELECT * FROM raters WHERE code_hash=?').bind(participantHash).first();
+      if (!rater) {
+        consentDetails(data);
+        const id=crypto.randomUUID();
+        // A shared door code never identifies a rater; a separate browser key does.
+        await env.DB.batch([
+          env.DB.prepare('INSERT OR IGNORE INTO raters (id,code_hash,label,is_test,created_at) VALUES(?,?,?,?,?)').bind(id,participantHash,`Participant ${id.slice(0,8).toUpperCase()}`,access.is_test,new Date().toISOString()),
+          env.DB.prepare('INSERT OR IGNORE INTO shared_participants (rater_id,access_id) SELECT id,? FROM raters WHERE code_hash=?').bind(access.id,participantHash)
+        ]);
+        rater=await env.DB.prepare('SELECT * FROM raters WHERE code_hash=?').bind(participantHash).first();
+      }
+    } else {
+      rater=await env.DB.prepare('SELECT * FROM raters WHERE code_hash=?').bind(codeHash).first();
+      if (rater) {
+        const shared=await env.DB.prepare('SELECT rater_id FROM shared_participants WHERE rater_id=?').bind(rater.id).first();
+        if (shared) fail(401,'Access code not recognised.');
+      }
+    }
+    if (!rater || !rater.active) fail(401, 'Access code not recognised.');
     if (env.STUDY_OPEN !== 'true' && !rater.is_test) fail(503,'The study is not open yet. Please contact the researcher.');
     if (!rater.consent_at) {
-      if (data.consent!==true || !['Veterinarian','Researcher','Farmer / hoof care professional','Student','Other'].includes(data.role) || !['Less than 1 year','1 to 5 years','More than 5 years'].includes(data.experience)) fail(400,'Please complete consent and experience details.');
+      consentDetails(data);
       await env.DB.prepare('UPDATE raters SET role=?,experience=?,consent_version=?,consent_at=? WHERE id=?')
         .bind(data.role,data.experience,CONSENT,new Date().toISOString(),rater.id).run();
     }
@@ -101,7 +144,7 @@ async function route(request, env) {
       env.DB.prepare('DELETE FROM login_limits WHERE expires<?').bind(now),
       env.DB.prepare('INSERT INTO sessions VALUES(?,?,?)').bind(await sha(token),rater.id,now+86400)
     ]);
-    return json({token,rater_id:rater.id,label:rater.label,is_test:!!rater.is_test});
+    return json({token,rater_id:rater.id,label:rater.label,is_test:!!rater.is_test,access_mode:access?'shared':'individual'});
   }
   if (path.startsWith('/media/')) {
     if (!['GET','HEAD'].includes(request.method)) fail(405,'Method not allowed.');

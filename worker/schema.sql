@@ -12,6 +12,15 @@ CREATE TABLE IF NOT EXISTS raters (
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY, rater_id TEXT NOT NULL REFERENCES raters(id), expires INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS shared_access (
+  id TEXT PRIMARY KEY, study_id TEXT NOT NULL, code_hash TEXT NOT NULL UNIQUE,
+  active INTEGER NOT NULL DEFAULT 1, is_test INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS shared_participants (
+  rater_id TEXT PRIMARY KEY REFERENCES raters(id),
+  access_id TEXT NOT NULL REFERENCES shared_access(id)
+);
 CREATE TABLE IF NOT EXISTS ratings (
   rater_id TEXT NOT NULL REFERENCES raters(id), clip_id TEXT NOT NULL REFERENCES clips(id),
   score INTEGER CHECK(score BETWEEN 1 AND 5), unscorable INTEGER NOT NULL CHECK(unscorable IN (0,1)),

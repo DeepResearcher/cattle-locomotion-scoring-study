@@ -53,3 +53,65 @@ test('access control, blinded manifest, independent ratings, revisions and priva
     console.log('Private media, isolation, authentication, validation, history and revocation verified.');
   } finally {await mf.dispose();}
 });
+
+async function sharedHarness(open=true) {
+  const mf=new Miniflare({scriptPath:new URL('../worker/index.js',import.meta.url).pathname.replace(/^\/([A-Z]:)/,'$1'),modules:true,compatibilityDate:'2026-07-01',d1Databases:['DB'],r2Buckets:['MEDIA'],bindings:{AUTH_SECRET:'test-shared-auth-secret',ADMIN_SECRET:'test-shared-admin-secret',ALLOWED_ORIGINS:'https://example.org',STUDY_ID:'shared-test',STUDY_OPEN:String(open)}});
+  const db=await mf.getD1Database('DB');
+  const schema=await fs.readFile(new URL('../worker/schema.sql',import.meta.url),'utf8');
+  for(const sql of schema.split(';').map(x=>x.trim()).filter(Boolean))await db.prepare(sql).run();
+  const call=async(resource,{data,token,method=data?'POST':'GET'}={})=>{
+    const response=await mf.dispatchFetch(`https://api.example.org/api${resource}`,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:data?JSON.stringify(data):undefined});
+    return {status:response.status,data:await response.json()};
+  };
+  return {mf,db,call,admin:'test-shared-admin-secret'};
+}
+
+test('One common code isolates browser participants and preserves individual preview access',async()=>{
+  const {mf,db,call,admin}=await sharedHarness();
+  try {
+    const clip={id:'clip-112233aabbcc',duration:3,frames:90,width:1920,height:1080};
+    await call('/admin/clips',{token:admin,data:{clips:[clip]}});
+    assert.equal((await call('/admin/shared-access',{data:{}})).status,401);
+    const access=(await call('/admin/shared-access',{token:admin,data:{}})).data;
+    const profile={code:access.code,role:'Veterinarian',experience:'More than 5 years',consent:true};
+    assert.equal((await call('/session',{data:profile})).status,400);
+    assert.equal((await call('/session',{data:{...profile,participant_key:'bad'}})).status,400);
+    assert.equal((await call('/session',{data:{...profile,participant_key:'a'.repeat(64),consent:false}})).status,400);
+    assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM raters').first()).n,0);
+    const a=(await call('/session',{data:{...profile,participant_key:'a'.repeat(64),is_test:true}})).data;
+    const b=(await call('/session',{data:{...profile,participant_key:'b'.repeat(64)}})).data;
+    assert.notEqual(a.rater_id,b.rater_id);assert.equal(a.access_mode,'shared');assert.equal(a.is_test,false);
+    const rating={score:2,unscorable:false,reason:'',confidence:'Moderate',notes:'unit test',watched_seconds:0,playback_rate:1,expected_revision:0};
+    assert.equal((await call(`/ratings/${clip.id}`,{method:'PUT',token:a.token,data:rating})).status,200);
+    assert.equal((await call(`/ratings/${clip.id}`,{method:'PUT',token:b.token,data:{...rating,score:4}})).status,200);
+    const resumed=(await call('/session',{data:{code:access.code,participant_key:'a'.repeat(64)}})).data;
+    assert.equal(resumed.rater_id,a.rater_id);
+    assert.equal((await call('/study',{token:resumed.token})).data.ratings[0].score,2);
+    assert.equal((await call('/study',{token:b.token})).data.ratings[0].score,4);
+    const parallel=await Promise.all([1,2].map(()=>call('/session',{data:{...profile,participant_key:'c'.repeat(64)}})));
+    assert.equal(parallel[0].data.rater_id,parallel[1].data.rater_id);
+    assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM raters').first()).n,3);
+    const preview=(await call('/admin/invite',{token:admin,data:{label:'Owner preview',is_test:true}})).data;
+    const owner=(await call('/session',{data:{...profile,code:preview.code}})).data;
+    assert.equal(owner.is_test,true);assert.equal(owner.access_mode,'individual');
+    await call('/admin/revoke',{token:admin,data:{id:a.rater_id}});
+    assert.equal((await call('/session',{data:{...profile,participant_key:'a'.repeat(64)}})).status,401);
+    await call('/admin/revoke-shared-access',{token:admin,data:{id:access.id}});
+    assert.equal((await call('/study',{token:b.token})).status,401);
+    assert.equal((await call('/session',{data:{...profile,participant_key:'d'.repeat(64)}})).status,401);
+    assert.equal((await call('/study',{token:owner.token})).status,200);
+  } finally {await mf.dispose();}
+});
+
+test('Shared access respects the study gate and an administrator-controlled test flag',async()=>{
+  const {mf,db,call,admin}=await sharedHarness(false);
+  try {
+    const real=(await call('/admin/shared-access',{token:admin,data:{}})).data;
+    const profile={code:real.code,participant_key:'e'.repeat(64),role:'Researcher',experience:'1 to 5 years',consent:true};
+    assert.equal((await call('/session',{data:profile})).status,503);
+    assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM raters').first()).n,0);
+    const preview=(await call('/admin/shared-access',{token:admin,data:{is_test:true}})).data;
+    const login=await call('/session',{data:{...profile,code:preview.code}});
+    assert.equal(login.status,200);assert.equal(login.data.is_test,true);
+  } finally {await mf.dispose();}
+});

@@ -1,4 +1,4 @@
-import { createIcons, Activity, LockKeyhole, LayoutGrid, LogOut, ArrowRight, ArrowLeft, RotateCcw, CircleHelp, Check, CircleCheck, Film, X, Download, ExternalLink } from 'lucide';
+import { createIcons, Activity, LockKeyhole, LayoutGrid, LogOut, ArrowRight, ArrowLeft, RotateCcw, CircleHelp, Check, CircleCheck, Film, X, Download, ExternalLink, UserRoundPlus } from 'lucide';
 import {translate, translateOption, translateError} from './i18n.js';
 import './style.css';
 
@@ -11,7 +11,20 @@ const tx=key=>`<span data-i18n="${key}">${esc(t(key))}</span>`;
 const icon=name=>`<i data-lucide="${name}" aria-hidden="true"></i>`;
 const iconLabel=key=>`data-i18n-title="${key}" title="${esc(t(key))}" aria-label="${esc(t(key))}"`;
 const options=values=>values.map(value=>`<option value="${esc(value)}" data-i18n-option>${esc(translateOption(S.language,value))}</option>`).join('');
-const activateIcons=()=>createIcons({icons:{Activity,LockKeyhole,LayoutGrid,LogOut,ArrowRight,ArrowLeft,RotateCcw,CircleHelp,Check,CircleCheck,Film,X,Download,ExternalLink},attrs:{'stroke-width':1.7}});
+const activateIcons=()=>createIcons({icons:{Activity,LockKeyhole,LayoutGrid,LogOut,ArrowRight,ArrowLeft,RotateCcw,CircleHelp,Check,CircleCheck,Film,X,Download,ExternalLink,UserRoundPlus},attrs:{'stroke-width':1.7}});
+
+function participantKey(){
+  const existing=localStorage.getItem('lcs-shared-participant-key');
+  if(/^[a-f0-9]{64}$/.test(existing || ''))return existing;
+  const key=[...crypto.getRandomValues(new Uint8Array(32))].map(x=>x.toString(16).padStart(2,'0')).join('');
+  localStorage.setItem('lcs-shared-participant-key',key);return key;
+}
+async function newParticipant(){
+  if(S.saving || !confirm(t('newParticipantConfirm')))return;
+  if(S.auth){try{await api('/session',{method:'DELETE'});}catch{}}
+  localStorage.removeItem('lcs-shared-participant-key');localStorage.removeItem('lcs-shared-participant-label');
+  S.dirty=false;S.study=null;S.ratings.clear();S.status=null;login();
+}
 
 async function api(path,options={}){
   const response=await fetch(`${API}/api${path}`,{...options,headers:{'Content-Type':'application/json',...(S.auth?{Authorization:`Bearer ${S.auth.token}`} : {}),...options.headers}});
@@ -47,9 +60,11 @@ function applyLanguage(){
   document.querySelectorAll('[data-i18n-aria]').forEach(el=>el.setAttribute('aria-label',t(el.dataset.i18nAria)));
   const select=document.querySelector('#language');if(select)select.value=S.language;
   const error=document.querySelector('#login-error');if(error)error.textContent=S.loginErrorKey?t(S.loginErrorKey):translateError(S.language,S.loginError);
+  const resume=document.querySelector('#participant-resume');if(resume)resume.textContent=t('existingParticipant',{participant:localStorage.getItem('lcs-shared-participant-label') || ''});
   dynamicLabels();if(document.querySelector('#recordings-dialog[open]'))drawList();
 }
 function bindLanguage(){
+  const reset=document.querySelector('#new-participant');if(reset)reset.onclick=newParticipant;
   document.querySelector('#language').onchange=event=>{
     S.language=event.target.value==='en'?'en':'de';localStorage.setItem('lcs-language',S.language);
     // Relabel in place to preserve drafts and video playback.
@@ -58,12 +73,12 @@ function bindLanguage(){
   applyLanguage();
 }
 function header(){
-  return `<header class="header"><div class="brand">${icon('activity')}<div><strong>${tx('brand')}</strong><span>${tx('subtitle')}</span></div></div><div class="header-actions"><label class="language-control"><span class="sr-only" data-i18n="language">${t('language')}</span><select id="language" data-i18n-aria="language" aria-label="${t('language')}"><option value="de"${S.language==='de'?' selected':''}>Deutsch</option><option value="en"${S.language==='en'?' selected':''}>English</option></select></label>${S.auth?`<span class="rater">${esc(S.auth.label)}${S.auth.is_test?` <small>${tx('preview')}</small>`:''}</span><button class="icon-button" id="clip-list" ${iconLabel('recordings')}>${icon('layout-grid')}</button><button class="icon-button" id="sign-out" ${iconLabel('signOut')}>${icon('log-out')}</button>`:`<span class="restricted">${icon('lock-keyhole')}${tx('restricted')}</span>`}</div></header>`;
+  return `<header class="header"><div class="brand">${icon('activity')}<div><strong>${tx('brand')}</strong><span>${tx('subtitle')}</span></div></div><div class="header-actions"><label class="language-control"><span class="sr-only" data-i18n="language">${t('language')}</span><select id="language" data-i18n-aria="language" aria-label="${t('language')}"><option value="de"${S.language==='de'?' selected':''}>Deutsch</option><option value="en"${S.language==='en'?' selected':''}>English</option></select></label>${S.auth?`<span class="rater">${esc(S.auth.label)}${S.auth.is_test?` <small>${tx('preview')}</small>`:''}</span><button class="icon-button" id="clip-list" ${iconLabel('recordings')}>${icon('layout-grid')}</button>${S.auth.access_mode==='shared'?`<button class="icon-button" id="new-participant" ${iconLabel('newParticipant')}>${icon('user-round-plus')}</button>`:''}<button class="icon-button" id="sign-out" ${iconLabel('signOut')}>${icon('log-out')}</button>`:`<span class="restricted">${icon('lock-keyhole')}${tx('restricted')}</span>`}</div></header>`;
 }
 function login(message='',key=''){
   S.auth=null;S.loginError=message;S.loginErrorKey=key;sessionStorage.removeItem('lcs-session');
   app.innerHTML=`${header()}<main class="login-layout"><section class="login-panel"><div class="login-heading">${icon('lock-keyhole')}<h1>${tx('studyAccess')}</h1></div>
-    <form id="login-form"><label for="access-code">${tx('accessCode')}</label><input id="access-code" type="password" autocomplete="current-password" required spellcheck="false" autocapitalize="characters">
+    <form id="login-form">${localStorage.getItem('lcs-shared-participant-label')?`<div class="participant-resume-row"><span id="participant-resume"></span><button type="button" class="icon-button" id="new-participant" ${iconLabel('newParticipant')}>${icon('user-round-plus')}</button></div>`:''}<label for="access-code">${tx('accessCode')}</label><input id="access-code" type="password" autocomplete="current-password" required spellcheck="false" autocapitalize="characters">
     <div class="profile-fields"><label for="role">${tx('background')}</label><select id="role" required><option value="" data-i18n="selectBackground">${t('selectBackground')}</option>${options(['Veterinarian','Researcher','Farmer / hoof care professional','Student','Other'])}</select>
     <label for="experience">${tx('experience')}</label><select id="experience" required><option value="" data-i18n="selectExperience">${t('selectExperience')}</option>${options(['Less than 1 year','1 to 5 years','More than 5 years'])}</select></div>
     <label class="consent"><input id="consent" type="checkbox" required>${tx('consent')}</label>
@@ -73,7 +88,8 @@ function login(message='',key=''){
   document.querySelector('#login-form').onsubmit=async event=>{
     event.preventDefault();const button=document.querySelector('#login-submit');button.disabled=true;
     try{
-      const result=await api('/session',{method:'POST',body:JSON.stringify({code:document.querySelector('#access-code').value,role:document.querySelector('#role').value,experience:document.querySelector('#experience').value,consent:document.querySelector('#consent').checked})});
+      const result=await api('/session',{method:'POST',body:JSON.stringify({code:document.querySelector('#access-code').value,participant_key:participantKey(),role:document.querySelector('#role').value,experience:document.querySelector('#experience').value,consent:document.querySelector('#consent').checked})});
+      if(result.access_mode==='shared')localStorage.setItem('lcs-shared-participant-label',result.label);
       S.auth=result;sessionStorage.setItem('lcs-session',JSON.stringify(result));await loadStudy();
     }catch(error){S.loginError=error.message;S.loginErrorKey='';document.querySelector('#login-error').textContent=translateError(S.language,error.message);button.disabled=false;}
   };

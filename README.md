@@ -8,7 +8,7 @@ Invitation-only video assessment interface, with German as the default and Engli
 - Cloudflare Worker: access control, scoped participant sessions and central rating API.
 - Private R2 bucket: video and poster files. No public bucket URL.
 - D1 database: pseudonymous participants, current ratings and revision history.
-- Server-checked personal access codes; no password embedded in browser JavaScript.
+- Server-checked common study code with a separate browser participant key; no password embedded in browser JavaScript.
 
 Invited raters see anonymous recordings in a participant-specific, reproducible random order. They cannot see cow IDs, source filenames, existing clinical scores, model predictions or another participant's scores. LCS choices are 1 through 5, with a separate unable-to-score option. An unavailable or unsuitable recording must not force a clinical score.
 
@@ -62,7 +62,7 @@ node tools/admin.mjs export
 node tools/admin.mjs revoke <participant-id>
 ```
 
-Each participant gets a different access code. Share individual codes privately; do not share the administrator secret. Preview ratings are marked as test data and excluded from the exported research CSV. All revisions remain in the administrator JSON audit export. The interface's personal download is a backup, not the central collection mechanism.
+Run `node tools/admin.mjs shared-code` once to prepare the common study code in `../private/Shared_Study_Access.local.json`. Share that code only with authorised raters. Each browser retains a separate random participant key: the common code does not merge ratings. Use the same browser to resume; another device or cleared browser storage creates another participant. On a shared device, choose "New participant" before a different person scores. This loses that browser's previous participant access, not the centrally saved ratings. A shared code cannot establish a unique real-world person or prevent duplicate enrolment. Revoking one participant does not stop that person enrolling again with a new browser key and the still-valid common code. Individual invitations and the separate owner preview code remain supported. Never share the administrator secret. Preview ratings are test data and excluded from research CSV exports.
 
 ## Study Interpretation
 
