@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5178",
     "build": "vite build",
-    "test": "node --test tests/api.test.mjs",
+    "test": "node --test tests/api.test.mjs tests/i18n.test.mjs",
     "preview": "vite preview --host 127.0.0.1 --port 5178",
     "api:local": "node tools/local-api.mjs",
     "admin": "node tools/admin.mjs"

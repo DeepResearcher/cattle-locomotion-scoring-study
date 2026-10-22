@@ -13,6 +13,7 @@ const errors=[];
 try {
   for(const [name,width,height] of [['desktop',1440,1000],['mobile',390,844]]) {
     const context=await browser.newContext({viewport:{width,height}}),page=await context.newPage();
+    await context.addInitScript(()=>localStorage.setItem('lcs-language','en'));
     page.on('pageerror',error=>errors.push(error.message));
     await page.goto('http://127.0.0.1:5178/',{waitUntil:'networkidle'});
     await page.locator('#access-code').fill(code);

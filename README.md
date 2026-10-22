@@ -1,6 +1,6 @@
 # Cattle Locomotion Scoring
 
-English, invitation-only video assessment interface. The public repository contains application code only. Video files, participant codes, source mappings, existing clinical scores and collected ratings must never enter this repository.
+Invitation-only video assessment interface, with German as the default and English available from the language selector. The public repository contains application code only. Video files, participant codes, source mappings, existing clinical scores and collected ratings must never enter this repository.
 
 ## Architecture
 
@@ -11,6 +11,10 @@ English, invitation-only video assessment interface. The public repository conta
 - Server-checked personal access codes; no password embedded in browser JavaScript.
 
 Invited raters see anonymous recordings in a participant-specific, reproducible random order. They cannot see cow IDs, source filenames, existing clinical scores, model predictions or another participant's scores. LCS choices are 1 through 5, with a separate unable-to-score option. An unavailable or unsuitable recording must not force a clinical score.
+
+Language preference is retained on the device. Switching languages updates the labels without recreating the video or clearing an unsaved score, notes or consent fields. Stored role, confidence and reason values remain in their existing canonical format regardless of the interface language.
+
+Selecting a valid LCS enables saving immediately. Playback time remains part of the rating record, but no minimum playback percentage is enforced. The earlier silent 80-percent playback gate was removed on 22 October 2026. An unable-to-score response still requires a reason, and a successful server acknowledgement remains necessary before advancing.
 
 ## Local Preview
 
