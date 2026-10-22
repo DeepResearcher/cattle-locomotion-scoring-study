@@ -76,6 +76,12 @@ function header(){
   return `<header class="header"><div class="brand">${icon('activity')}<div><strong>${tx('brand')}</strong><span>${tx('subtitle')}</span></div></div><div class="header-actions"><label class="language-control"><span class="sr-only" data-i18n="language">${t('language')}</span><select id="language" data-i18n-aria="language" aria-label="${t('language')}"><option value="de"${S.language==='de'?' selected':''}>Deutsch</option><option value="en"${S.language==='en'?' selected':''}>English</option></select></label>${S.auth?`<span class="rater">${esc(S.auth.label)}${S.auth.is_test?` <small>${tx('preview')}</small>`:''}</span><button class="icon-button" id="clip-list" ${iconLabel('recordings')}>${icon('layout-grid')}</button>${S.auth.access_mode==='shared'?`<button class="icon-button" id="new-participant" ${iconLabel('newParticipant')}>${icon('user-round-plus')}</button>`:''}<button class="icon-button" id="sign-out" ${iconLabel('signOut')}>${icon('log-out')}</button>`:`<span class="restricted">${icon('lock-keyhole')}${tx('restricted')}</span>`}</div></header>`;
 }
 function login(message='',key=''){
+  ++S.loadNumber;
+  const video=document.querySelector('#video');
+  if(video){
+    video.onloadeddata=null;video.onerror=null;video.ontimeupdate=null;video.onended=null;
+    video.pause();video.removeAttribute('src');video.load();
+  }
   S.auth=null;S.loginError=message;S.loginErrorKey=key;sessionStorage.removeItem('lcs-session');
   app.innerHTML=`${header()}<main class="login-layout"><section class="login-panel"><div class="login-heading">${icon('lock-keyhole')}<h1>${tx('studyAccess')}</h1></div>
     <form id="login-form">${localStorage.getItem('lcs-shared-participant-label')?`<div class="participant-resume-row"><span id="participant-resume"></span><button type="button" class="icon-button" id="new-participant" ${iconLabel('newParticipant')}>${icon('user-round-plus')}</button></div>`:''}<label for="access-code">${tx('accessCode')}</label><input id="access-code" type="password" autocomplete="current-password" required spellcheck="false" autocapitalize="characters">
