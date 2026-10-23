@@ -8,7 +8,10 @@ const STUDY=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const endpoint=process.env.LCS_API_URL || 'https://paper3-lcs-rating-api.serhan-narli.workers.dev';
 const website=process.env.LCS_SITE_URL || 'https://deepresearcher.github.io/cattle-locomotion-scoring-study/';
 const isLocal=website.startsWith('http://127.0.0.1:');
-const OUT=path.join(STUDY,isLocal?'reports/local_language_qa':'reports/published_browser_qa');
+const version=process.env.LCS_VERIFY_VERSION || '1';
+const clipCount=Number(process.env.LCS_VERIFY_CLIPS || 76);
+const suffix=version==='1'?'':`_v${version}`;
+const OUT=path.join(STUDY,(isLocal?'reports/local_language_qa':'reports/published_browser_qa')+suffix);
 await fs.mkdir(OUT,{recursive:true});
 const secrets=JSON.parse(await fs.readFile(path.join(STUDY,'private/server_credentials.local.json'),'utf8'));
 async function admin(resource,data) {
@@ -17,7 +20,7 @@ async function admin(resource,data) {
   return response.json();
 }
 const invite=await admin('invite',{label:'PUBLISHED BROWSER TEST ONLY',is_test:true});
-const browser=await chromium.launch({headless:true,executablePath:'C:\\Users\\Serhan\\AppData\\Local\\ms-playwright\\chromium-1234\\chrome-win64\\chrome.exe'});
+const browser=await chromium.launch({headless:true,channel:'chrome'});
 const results=[],errors=[];
 try {
   for(const [name,width,height] of [['desktop',1440,1000],['mobile',390,844],['narrow-mobile',320,780]]) {
@@ -105,12 +108,12 @@ try {
     await page.reload({waitUntil:'networkidle'});
     await page.waitForSelector('#video');
     assert.equal(await page.locator('html').getAttribute('lang'),'de');
-    assert.match(await page.locator('#progress-label').textContent(),/^[1-9]\d* (?:of 76 assessed|von 76 beurteilt)$/);
+    assert.match(await page.locator('#progress-label').textContent(),new RegExp(`^[1-9]\\d* (?:of ${clipCount} assessed|von ${clipCount} beurteilt)$`));
     await page.selectOption('#language','en');
     await page.reload({waitUntil:'networkidle'});
     await page.waitForSelector('#video');
     assert.equal(await page.locator('html').getAttribute('lang'),'en');
-    assert.match(await page.locator('#progress-label').textContent(),/^[1-9]\d* of 76 assessed$/);
+    assert.match(await page.locator('#progress-label').textContent(),new RegExp(`^[1-9]\\d* of ${clipCount} assessed$`));
     await page.locator('input[name="score"][value="unable"]').check();
     assert.ok(await page.locator('#save-next').isDisabled());
     await page.selectOption('#reason','Other');
@@ -122,7 +125,7 @@ try {
     await context.close();
   }
   assert.deepEqual(errors,[]);
-  await fs.writeFile(path.join(STUDY,isLocal?'reports/Local_Language_Verification.json':'reports/Published_Interface_Verification.json'),JSON.stringify({
+  await fs.writeFile(path.join(STUDY,(isLocal?'reports/Local_Language_Verification':'reports/Published_Interface_Verification')+suffix+'.json'),JSON.stringify({
     passed:true,website,endpoint,remote_private_video_playback:true,desktop_and_mobile:true,
     failed_save_retains_draft_and_does_not_advance:true,results,page_errors:errors,checked_at:new Date().toISOString()
   },null,2));

@@ -39,3 +39,11 @@ CREATE TABLE IF NOT EXISTS login_limits (
 );
 CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires);
 CREATE INDEX IF NOT EXISTS clips_study ON clips(study_id);
+CREATE TABLE IF NOT EXISTS clip_pairs (
+  clip_id TEXT PRIMARY KEY REFERENCES clips(id), pair_group TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS study_orders (
+  rater_id TEXT NOT NULL REFERENCES raters(id), study_id TEXT NOT NULL,
+  version INTEGER NOT NULL, clip_ids TEXT NOT NULL, created_at TEXT NOT NULL,
+  PRIMARY KEY (rater_id,study_id,version)
+);

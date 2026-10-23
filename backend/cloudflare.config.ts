@@ -12,6 +12,7 @@ export default defineConfig({
       ADMIN_SECRET: bindings.secret(),
       ALLOWED_ORIGINS: bindings.text('https://deepresearcher.github.io,http://127.0.0.1:5178,http://localhost:5178'),
       STUDY_ID: bindings.text('cattle-lcs-20261022'),
+      STUDY_VERSION: bindings.text(process.env.LCS_STUDY_VERSION || '2'),
       STUDY_OPEN: bindings.text(process.env.LCS_STUDY_OPEN === 'true' ? 'true' : 'false')
     },
     observability: {enabled: true, redactQueryString: true, logs: {enabled: true, invocationLogs: false}, traces: {enabled: true}}

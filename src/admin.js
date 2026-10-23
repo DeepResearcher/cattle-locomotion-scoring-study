@@ -7,7 +7,7 @@ import './admin.css';
 
 const API=import.meta.env.VITE_API_URL || '';
 const app=document.querySelector('#admin-app');
-const S={language:localStorage.getItem('lcs-language')==='en'?'en':'de',token:null,data:null,includeTests:false,raterId:'',busy:false,error:'',generation:0,timer:null};
+const S={language:localStorage.getItem('lcs-language')==='en'?'en':'de',token:null,data:null,includeTests:false,raterId:'',version:'',busy:false,error:'',generation:0,timer:null};
 const t=key=>adminMessages[S.language][key];
 const esc=value=>String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icon=name=>`<i data-lucide="${name}" aria-hidden="true"></i>`;
@@ -37,6 +37,12 @@ function render() {
     document.querySelector('#include-tests').checked=S.includeTests;
     document.querySelector('#include-tests').onchange=e=>{S.includeTests=e.target.checked;S.raterId='';drawData();};
     document.querySelector('#participant-filter').onchange=e=>{S.raterId=e.target.value;drawData();};
+    document.querySelector('.admin-filters').insertAdjacentHTML('afterbegin',`<div><label for="version-filter">${t('version')}</label><select id="version-filter"></select></div>`);
+    document.querySelector('#version-filter').onchange=async e=>{
+      if(S.busy)return;
+      const before=S.version;S.version=e.target.value;S.raterId='';await refresh();
+      if(S.error){S.version=before;drawData();}
+    };
     drawData();
   }
   const language=document.querySelector('#language');language.value=S.language;
@@ -55,6 +61,11 @@ function drawData() {
   document.querySelector('#json').disabled=!S.data || S.busy;
   document.querySelector('#admin-status').textContent=S.error?t(S.error):S.busy?t('loading'):'';
   if (!S.data) return;
+  const versions=S.data.available_versions || [];
+  const versionSelect=document.querySelector('#version-filter');
+  versionSelect.innerHTML=versions.map(v=>`<option value="${v.version}">${t('version')} ${v.version} (${v.clips} ${t('clips')})${v.version===S.data.active_version?` - ${t('currentVersion')}`:` - ${t('archivedVersion')}`}</option>`).join('');
+  versionSelect.value=String(S.data.selected_version || S.data.active_version || 1);
+  versionSelect.disabled=S.busy;
   const options=selectResults(S.data,{includeTests:S.includeTests}).raters.filter(r=>r.consent_at || S.data.ratings.some(x=>x.rater_id===r.id));
   document.querySelector('#participant-filter').innerHTML=`<option value="">${t('all')}</option>`+options.map(r=>`<option value="${esc(r.id)}">${esc(r.label)}${Number(r.is_test)?` (${t('test')})`:''}</option>`).join('');
   document.querySelector('#participant-filter').value=S.raterId;
@@ -91,9 +102,9 @@ async function refresh() {
   if (S.busy || !S.token) return;
   S.busy=true;S.error='';drawData();const generation=S.generation;
   try {
-    const data=await request('export',S.token);
+    const data=await request(`export${S.version?`?version=${encodeURIComponent(S.version)}`:''}`,S.token);
     if (generation!==S.generation) return;
-    S.data=data;
+    S.data=data;S.version=String(data.selected_version || data.active_version || 1);
   } catch (error) {
     if (generation!==S.generation) return;
     if (error.status===401) return logout('expired');
@@ -105,7 +116,7 @@ async function refresh() {
 
 function logout(message='') {
   ++S.generation;clearTimeout(S.timer);
-  S.token=null;S.data=null;S.raterId='';S.includeTests=false;S.busy=false;S.error=message;render();
+  S.token=null;S.data=null;S.raterId='';S.version='';S.includeTests=false;S.busy=false;S.error=message;render();
 }
 
 function download(format) {
@@ -113,7 +124,7 @@ function download(format) {
   const data=selected(),content=format==='csv'?ratingsCsv(data.ratings):JSON.stringify(data,null,2);
   const url=URL.createObjectURL(new Blob([content],{type:format==='csv'?'text/csv;charset=utf-8':'application/json'}));
   const link=document.createElement('a');link.href=url;
-  link.download=`lcs-ratings-${data.exported_at.replace(/[:.]/g,'-')}${S.includeTests?'-including-tests':''}${S.raterId?'-participant':''}.${format}`;
+  link.download=`lcs-ratings-v${data.selected_version || 1}-${data.exported_at.replace(/[:.]/g,'-')}${S.includeTests?'-including-tests':''}${S.raterId?'-participant':''}.${format}`;
   link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 

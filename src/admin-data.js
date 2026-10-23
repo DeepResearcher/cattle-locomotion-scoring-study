@@ -9,10 +9,12 @@ export function selectResults(data,{includeTests=false,raterId=''}={}) {
   const byId=new Map(raters.map(r=>[r.id,r]));
   return {
     study_id:data.study_id,exported_at:data.exported_at,
+    selected_version:data.selected_version,active_version:data.active_version,
     includes_test_data:includeTests,participant_filter:raterId || null,
     clips:data.clips || [],raters,
     ratings:data.ratings.filter(r=>byId.has(r.rater_id)).map(r=>({...r,is_test:Number(byId.get(r.rater_id).is_test)})),
-    history:data.history.filter(r=>byId.has(r.rater_id))
+    history:data.history.filter(r=>byId.has(r.rater_id)),
+    orders:(data.orders || []).filter(r=>byId.has(r.rater_id))
   };
 }
 

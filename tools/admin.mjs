@@ -53,7 +53,7 @@ if(command==='shared-code') {
   }
   console.log(`Saved ${count} access codes privately: ${file}`);
 } else if(command==='export') {
-  const value=await call('export');
+  const value=await call(process.argv.includes('--all-versions')?'export?version=all':'export');
   const dir=path.join(ROOT,'collected_ratings');await fs.mkdir(dir,{recursive:true});
   const stem=new Date().toISOString().replace(/[:.]/g,'-');
   await fs.writeFile(path.join(dir,`${stem}.json`),JSON.stringify(value,null,2));

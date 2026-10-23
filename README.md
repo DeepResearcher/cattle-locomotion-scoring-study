@@ -12,6 +12,10 @@ Invitation-only video assessment interface, with German as the default and Engli
 
 Invited raters see anonymous recordings in a participant-specific, reproducible random order. They cannot see cow IDs, source filenames, existing clinical scores, model predictions or another participant's scores. LCS choices are 1 through 5, with a separate unable-to-score option. An unavailable or unsuitable recording must not force a clinical score.
 
+Study version 2 contains 56 original excerpts and 14 horizontally mirrored repeats, making 70 presentations from 56 cows. Each participant's shuffled order is stored in D1. A pair's positions differ by at least 12, leaving at least 11 intervening presentations. Either orientation may appear first. Reopening the study preserves the order. The private pair map is not sent to participants, and existing scores are never used to sort presentations.
+
+Version 1 and its ratings remain archived. Version 2 uses new anonymous clip identifiers, so ratings for an earlier viewing interval cannot silently become ratings for a new excerpt. The shared access code and browser participant identities remain unchanged. Stale requests to rate an archived clip are rejected. Administrative exports include the study version and stored presentation orders; the version selector keeps old and new results separate.
+
 Language preference is retained on the device. Switching languages updates the labels without recreating the video or clearing an unsaved score, notes or consent fields. Stored role, confidence and reason values remain in their existing canonical format regardless of the interface language.
 
 Selecting a valid LCS enables saving immediately. Playback time remains part of the rating record, but no minimum playback percentage is enforced. The earlier silent 80-percent playback gate was removed on 22 October 2026. An unable-to-score response still requires a reason, and a successful server acknowledgement remains necessary before advancing.
@@ -63,6 +67,7 @@ Set `LCS_API_URL` in your local shell to the deployed API origin before these co
 node tools/admin.mjs seed
 node tools/admin.mjs invite 12
 node tools/admin.mjs export
+node tools/admin.mjs export --all-versions
 node tools/admin.mjs revoke <participant-id>
 ```
 
@@ -70,7 +75,9 @@ Run `node tools/admin.mjs shared-code` once to prepare the common study code in 
 
 ## Study Interpretation
 
-The clips include the previously selected kinematic intervals. The seven intervals shorter than one second are expanded to approximately five seconds of actual surrounding footage for human rating; the analysis intervals and measurements remain unchanged. This viewing context is mapped separately in `Rating_Clip_Source_Mapping.csv`. Some contexts overlap within the same source video and must not be treated as independent observations. The five-point guide adapts the reference for walking clips; standing posture may be unavailable. Review the study protocol with the clinical team before recruitment. Preserve unscorable responses and reasons instead of excluding them silently. Repeated clips from the same cow are correlated; subsequent agreement analyses must retain the private cow/clip mapping and account for clustering. These new ratings do not by themselves make the reference perfectly objective.
+The archived version 1 included 76 viewing clips, some with extended context around short analytical intervals. Its mapping remains in `Rating_Clip_Source_Mapping.csv`. Version 2 uses the separately verified 56-original/14-mirrored package: 50 originals use selected analysis intervals and six use accepted viewing windows. The latter are not a claim that new kinematics were computed. Source frame bounds, identities and original reference labels remain in the private version 2 mapping. Browser copies preserve the selected frames, timing and full spatial image, without keypoint overlays or audio.
+
+The 14 mirrored repeats are not additional cows or independent biological recordings. The five-point guide adapts the reference for walking clips; standing posture may be unavailable. Review the study protocol with the clinical team before recruitment. Preserve unscorable responses and reasons instead of excluding them silently. Repeated clips from the same cow are correlated; subsequent agreement analyses must retain the private cow/clip mapping and account for clustering. These new ratings do not by themselves make the reference perfectly objective.
 
 Authentication limits access but cannot prevent an authorised participant from screen recording or redistributing a clip. Retain data-owner permission and give access only to authorised raters.
 

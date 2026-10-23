@@ -3,18 +3,21 @@ import assert from 'node:assert/strict';
 import {selectResults,resultsSummary,ratingsCsv,ratingFields} from '../src/admin-data.js';
 import {adminMessages} from '../src/admin-i18n.js';
 
-const fixture={study_id:'test',exported_at:'2026-10-22T12:00:00Z',
+const fixture={study_id:'test',exported_at:'2026-10-22T12:00:00Z',selected_version:2,active_version:2,
   clips:[{id:'one'},{id:'two'}],
   raters:[{id:'real',label:'Real',is_test:0,consent_at:'2026-10-22',active:1},{id:'preview',label:'Preview',is_test:1,consent_at:'2026-10-22',active:0},{id:'unused',is_test:0}],
   ratings:[{rater_id:'real',clip_id:'one',score:2,unscorable:0,updated_at:'2026-10-22T12:00:00Z'},
     {rater_id:'real',clip_id:'two',score:null,unscorable:1,updated_at:'2026-10-22T12:01:00Z'},
     {rater_id:'preview',clip_id:'one',score:5,unscorable:0,updated_at:'2026-10-22T12:02:00Z'}],
-  history:[{rater_id:'real',id:1},{rater_id:'preview',id:2}]
+  history:[{rater_id:'real',id:1},{rater_id:'preview',id:2}],
+  orders:[{rater_id:'real',version:2,clip_ids:'["one","two"]'},{rater_id:'preview',version:2,clip_ids:'["two","one"]'}]
 };
 
 test('Research exports exclude test ratings, participants AND history; filters retain denominators',()=>{
   const before=JSON.stringify(fixture),selected=selectResults(fixture),s=resultsSummary(selected);
   assert.equal(selected.ratings.length,2);assert.equal(selected.history.length,1);
+  assert.equal(selected.selected_version,2);assert.equal(selected.active_version,2);
+  assert.deepEqual(selected.orders,[fixture.orders[0]]);
   assert.equal(selected.raters.some(r=>r.id==='preview'),false);
   assert.equal(selected.includes_test_data,false);
   assert.equal(s.participants.length,1);assert.equal(s.completed,1);assert.equal(s.unscorable,1);
@@ -22,6 +25,7 @@ test('Research exports exclude test ratings, participants AND history; filters r
   const preview=selectResults(fixture,{includeTests:true,raterId:'preview'});
   assert.equal(preview.ratings.length,1);assert.equal(preview.history[0].id,2);
   assert.equal(preview.ratings[0].is_test,1);assert.equal(preview.clips.length,2);
+  assert.deepEqual(preview.orders,[fixture.orders[1]]);
   assert.equal(selectResults(fixture,{raterId:'preview'}).ratings.length,0);
   assert.equal(JSON.stringify(fixture),before);
 });

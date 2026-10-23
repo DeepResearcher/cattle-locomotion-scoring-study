@@ -55,8 +55,8 @@ test('access control, blinded manifest, independent ratings, revisions and priva
   } finally {await mf.dispose();}
 });
 
-async function sharedHarness(open=true) {
-  const mf=new Miniflare({scriptPath:new URL('../worker/index.js',import.meta.url).pathname.replace(/^\/([A-Z]:)/,'$1'),modules:true,compatibilityDate:'2026-07-01',d1Databases:['DB'],r2Buckets:['MEDIA'],bindings:{AUTH_SECRET:'test-shared-auth-secret',ADMIN_SECRET:'test-shared-admin-secret',ALLOWED_ORIGINS:'https://example.org',STUDY_ID:'shared-test',STUDY_OPEN:String(open)}});
+async function sharedHarness(open=true,version=1) {
+  const mf=new Miniflare({scriptPath:new URL('../worker/index.js',import.meta.url).pathname.replace(/^\/([A-Z]:)/,'$1'),modules:true,compatibilityDate:'2026-07-01',d1Databases:['DB'],r2Buckets:['MEDIA'],bindings:{AUTH_SECRET:'test-shared-auth-secret',ADMIN_SECRET:'test-shared-admin-secret',ALLOWED_ORIGINS:'https://example.org',STUDY_ID:'shared-test',STUDY_VERSION:String(version),STUDY_OPEN:String(open)}});
   const db=await mf.getD1Database('DB');
   const schema=await fs.readFile(new URL('../worker/schema.sql',import.meta.url),'utf8');
   for(const sql of schema.split(';').map(x=>x.trim()).filter(Boolean))await db.prepare(sql).run();
@@ -142,5 +142,46 @@ test('Shared access respects the study gate and an administrator-controlled test
     const preview=(await call('/admin/shared-access',{token:admin,data:{is_test:true}})).data;
     const login=await call('/session',{data:{...profile,code:preview.code}});
     assert.equal(login.status,200);assert.equal(login.data.is_test,true);
+  } finally {await mf.dispose();}
+});
+
+test('Version 2 isolates historical ratings, persists blinded orders and retains archived exports',async()=>{
+  const {mf,db,call,admin}=await sharedHarness(true,2);
+  try {
+    const ids=Array.from({length:70},(_,i)=>`clip-${(i+1).toString(16).padStart(12,'0')}`);
+    for(const [i,id] of ids.entries()) {
+      await db.prepare('INSERT INTO clips VALUES(?,?,?,?,?,?,?,?,?)').bind(id,'shared-test',2,3,90,1920,1080,id+'.mp4',id+'.jpg').run();
+      await db.prepare('INSERT INTO clip_pairs VALUES(?,?)').bind(id,`private-pair-${i>=56?i-56:i}`).run();
+    }
+    const old='clip-ffffffffffff';
+    await db.prepare('INSERT INTO clips VALUES(?,?,?,?,?,?,?,?,?)').bind(old,'shared-test',1,3,90,1920,1080,old+'.mp4',old+'.jpg').run();
+    const access=(await call('/admin/shared-access',{token:admin,data:{}})).data;
+    const profile={code:access.code,participant_key:'a'.repeat(64),role:'Researcher',experience:'1 to 5 years',consent:true};
+    const login=(await call('/session',{data:profile})).data;
+    await db.prepare('INSERT INTO ratings VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').bind(login.rater_id,old,3,0,'','Moderate','historic',2,1,1,'2026-10-22',1).run();
+    await db.prepare('INSERT INTO rating_history(rater_id,clip_id,payload,saved_at) VALUES(?,?,?,?)').bind(login.rater_id,old,'{}','2026-10-22').run();
+    const study=(await call('/study',{token:login.token})).data;
+    assert.equal(study.version,2);assert.equal(study.clips.length,70);assert.equal(study.ratings.length,0);
+    assert.equal(JSON.stringify(study).includes('pair_group'),false);
+    assert.equal(JSON.stringify(study).includes('private-pair'),false);
+    const positions=new Map(study.clips.map((c,i)=>[c.id,i]));
+    for(let i=0;i<14;i++)assert.ok(Math.abs(positions.get(ids[i])-positions.get(ids[i+56]))>=12);
+    const resumed=(await call('/session',{data:profile})).data;
+    assert.deepEqual((await call('/study',{token:resumed.token})).data.clips,study.clips);
+    const stored=await db.prepare('SELECT clip_ids FROM study_orders WHERE rater_id=?').bind(login.rater_id).first();
+    assert.deepEqual(JSON.parse(stored.clip_ids),study.clips.map(c=>c.id));
+    const other=(await call('/session',{data:{...profile,participant_key:'b'.repeat(64)}})).data;
+    assert.notDeepEqual((await call('/study',{token:other.token})).data.clips,study.clips);
+    assert.equal((await call(`/ticket/${old}`,{token:login.token,data:{}})).status,404);
+    const rating={score:2,unscorable:false,confidence:'Moderate',notes:'',reason:'',watched_seconds:0,playback_rate:1,expected_revision:0};
+    assert.equal((await call(`/ratings/${old}`,{token:login.token,data:rating,method:'PUT'})).status,404);
+    assert.equal((await call(`/ratings/${ids[0]}`,{token:login.token,data:rating,method:'PUT'})).status,200);
+    assert.equal((await call('/study',{token:login.token})).data.ratings[0].study_version,2);
+    const current=(await call('/admin/export',{token:admin})).data;
+    assert.equal(current.clips.length,70);assert.equal(current.ratings.length,1);assert.equal(current.history.length,1);assert.equal(current.orders.length,2);
+    const archived=(await call('/admin/export?version=1',{token:admin})).data;
+    assert.equal(archived.clips.length,1);assert.equal(archived.ratings[0].notes,'historic');assert.equal(archived.history.length,1);
+    assert.equal((await call('/admin/export?version=all',{token:admin})).data.ratings.length,2);
+    assert.equal((await call('/admin/export?version=oops',{token:admin})).status,400);
   } finally {await mf.dispose();}
 });

@@ -187,7 +187,7 @@ function drawList(){
   });
 }
 function download(){
-  const payload={study_id:S.study.id,participant:S.auth.label,exported_at:new Date().toISOString(),ratings:[...S.ratings.values()]};
+  const payload={study_id:S.study.id,study_version:S.study.version,participant:S.auth.label,exported_at:new Date().toISOString(),ratings:[...S.ratings.values()]};
   const url=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));
   const link=document.createElement('a');link.href=url;link.download='my-locomotion-ratings.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
