@@ -47,3 +47,8 @@ CREATE TABLE IF NOT EXISTS study_orders (
   version INTEGER NOT NULL, clip_ids TEXT NOT NULL, created_at TEXT NOT NULL,
   PRIMARY KEY (rater_id,study_id,version)
 );
+CREATE TABLE IF NOT EXISTS media_releases (
+  study_id TEXT NOT NULL, version INTEGER NOT NULL, revision TEXT NOT NULL,
+  applied_at TEXT NOT NULL, details TEXT NOT NULL,
+  PRIMARY KEY (study_id,version,revision)
+);

@@ -49,8 +49,19 @@ test('access control, blinded manifest, independent ratings, revisions and priva
     assert.equal(head.status,200);assert.equal(head.headers.get('content-length'),'5');assert.equal((await head.arrayBuffer()).byteLength,0);
     const range=await mf.dispatchFetch('https://api.example.org'+media.video,{headers:{Range:'bytes=1-3'}});
     assert.equal(range.status,206); assert.equal(range.headers.get('content-range'),'bytes 1-3/5'); assert.deepEqual([...new Uint8Array(await range.arrayBuffer())],[2,3,4]);
+    const ratingBefore=(await db.prepare('SELECT * FROM ratings ORDER BY clip_id').all()).results;
+    await bucket.put(`privacy-v1/${clips[0].id}.mp4`,new Uint8Array([8,9,10]));
+    await bucket.put(`privacy-v1/${clips[0].id}.jpg`,new Uint8Array([11,12]));
+    await db.prepare('UPDATE clips SET video_key=?,poster_key=? WHERE id=?').bind(`privacy-v1/${clips[0].id}.mp4`,`privacy-v1/${clips[0].id}.jpg`,clips[0].id).run();
+    const replaced=await mf.dispatchFetch('https://api.example.org'+media.video);
+    assert.deepEqual([...new Uint8Array(await replaced.arrayBuffer())],[8,9,10]);
+    const poster=await mf.dispatchFetch('https://api.example.org'+media.poster);
+    assert.deepEqual([...new Uint8Array(await poster.arrayBuffer())],[11,12]);
+    assert.equal((await call(`/media/privacy-v1/${clips[0].id}.mp4`)).status,401);
+    assert.deepEqual((await db.prepare('SELECT * FROM ratings ORDER BY clip_id').all()).results,ratingBefore);
     const exported=JSON.parse((await call('/admin/export',{token:admin})).body);
     assert.equal(exported.ratings.length,2); assert.equal(exported.history.length,3);
+    assert.equal(exported.clips.find(c=>c.id===clips[0].id).media_revision,'privacy-v1');
     assert.ok(!JSON.stringify(exported).includes('code_hash'));
     await call('/admin/revoke',{method:'POST',token:admin,data:{id:a.id}});
     assert.equal((await call('/study',{token:ta})).status,401);
@@ -147,6 +158,13 @@ test('Shared access respects the study gate and an administrator-controlled test
     const preview=(await call('/admin/shared-access',{token:admin,data:{is_test:true}})).data;
     const login=await call('/session',{data:{...profile,code:preview.code}});
     assert.equal(login.status,200);assert.equal(login.data.is_test,true);
+    const clip={id:'clip-123456abcdef',duration:2,frames:60,width:1920,height:1080};
+    await call('/admin/clips',{token:admin,data:{clips:[clip]}});
+    const bucket=await mf.getR2Bucket('MEDIA');await bucket.put(`${clip.id}.mp4`,new Uint8Array([1]));
+    const ticket=(await call(`/ticket/${clip.id}`,{token:login.data.token,data:{}})).data;
+    assert.equal((await mf.dispatchFetch('https://api.example.org'+ticket.video)).status,200);
+    await db.prepare('UPDATE raters SET is_test=0 WHERE id=?').bind(login.data.rater_id).run();
+    assert.equal((await mf.dispatchFetch('https://api.example.org'+ticket.video)).status,503);
   } finally {await mf.dispose();}
 });
 

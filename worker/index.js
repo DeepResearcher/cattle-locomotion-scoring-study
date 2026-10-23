@@ -32,6 +32,7 @@ async function session(request, env, tokenHash) {
   return {...row, tokenHash: hash};
 }
 const activeVersion=env=>Number(env.STUDY_VERSION || 1);
+const mediaRevision=clip=>clip.video_key.includes('/')?clip.video_key.split('/')[0]:'original';
 async function clips(env,version=activeVersion(env)) {
   return (await env.DB.prepare('SELECT c.*,p.pair_group FROM clips c LEFT JOIN clip_pairs p ON p.clip_id=c.id WHERE c.study_id=? AND (? IS NULL OR c.version=?)')
     .bind(env.STUDY_ID,version,version).all()).results;
@@ -118,10 +119,11 @@ async function route(request, env) {
       const ratings = (await env.DB.prepare('SELECT t.*,r.label,r.role,r.experience,r.is_test,r.consent_at FROM ratings t JOIN raters r ON r.id=t.rater_id JOIN clips c ON c.id=t.clip_id WHERE c.study_id=? AND (? IS NULL OR c.version=?) ORDER BY t.rater_id,t.clip_id').bind(env.STUDY_ID,version,version).all()).results;
       const history = (await env.DB.prepare('SELECT h.* FROM rating_history h JOIN clips c ON c.id=h.clip_id WHERE c.study_id=? AND (? IS NULL OR c.version=?) ORDER BY h.id').bind(env.STUDY_ID,version,version).all()).results;
       const raters = (await env.DB.prepare('SELECT id,label,active,is_test,role,experience,consent_at FROM raters').all()).results;
-      const manifest=(await clips(env,version)).map(({id,version,duration})=>({id,version,duration}));
+      const manifest=(await clips(env,version)).map(c=>({id:c.id,version:c.version,duration:c.duration,media_revision:mediaRevision(c)}));
       const versions=(await env.DB.prepare('SELECT version,COUNT(*) AS clips FROM clips WHERE study_id=? GROUP BY version ORDER BY version DESC').bind(env.STUDY_ID).all()).results;
       const orders=(await env.DB.prepare('SELECT * FROM study_orders WHERE study_id=? AND (? IS NULL OR version=?)').bind(env.STUDY_ID,version,version).all()).results;
-      return json({study_id:env.STUDY_ID,active_version:activeVersion(env),selected_version:version,available_versions:versions,exported_at:new Date().toISOString(),clips:manifest,ratings,history,raters,orders});
+      const media_releases=(await env.DB.prepare('SELECT * FROM media_releases WHERE study_id=? AND (? IS NULL OR version=?) ORDER BY applied_at').bind(env.STUDY_ID,version,version).all()).results;
+      return json({study_id:env.STUDY_ID,active_version:activeVersion(env),selected_version:version,available_versions:versions,exported_at:new Date().toISOString(),clips:manifest,ratings,history,raters,orders,media_releases});
     }
     fail(404, 'Not found.');
   }
@@ -180,14 +182,17 @@ async function route(request, env) {
     const id = path.slice(7), ticket = url.searchParams.get('ticket') || '';
     const [expires,hash,signature] = ticket.split('.');
     if (!/^clip-[a-f0-9]{12}\.(mp4|jpg)$/.test(id) || !/^\d{10}$/.test(expires || '') || Number(expires)<Date.now()/1000 || Number(expires)>Date.now()/1000+1900 || !/^[a-f0-9]{64}$/.test(hash || '') || !constantEqual(signature, await mac(env.AUTH_SECRET,`${id}:${expires}:${hash}`))) fail(401,'Media access expired.');
-    await session(request,env,hash);
-    const clip = await env.DB.prepare('SELECT id FROM clips WHERE id=? AND study_id=? AND version=?').bind(id.split('.')[0],env.STUDY_ID,activeVersion(env)).first();
+    const viewer=await session(request,env,hash);
+    if (env.STUDY_OPEN !== 'true' && !viewer.is_test) fail(503,'The study is paused.');
+    const clip = await env.DB.prepare('SELECT id,video_key,poster_key FROM clips WHERE id=? AND study_id=? AND version=?').bind(id.split('.')[0],env.STUDY_ID,activeVersion(env)).first();
     if (!clip) fail(404,'Not found.');
     if (!env.MEDIA) fail(503,'Video storage is not configured.');
     const range = request.headers.get('range');
     if (range && !/^bytes=\d*-\d*$/.test(range)) fail(416,'Invalid range.');
     let object;
-    try { object = await env.MEDIA.get(id, range ? {range:request.headers} : undefined); }
+    // Resolve the current private object even when a viewer holds an older ticket.
+    const key=id.endsWith('.mp4')?clip.video_key:clip.poster_key;
+    try { object = await env.MEDIA.get(key, range ? {range:request.headers} : undefined); }
     catch { fail(416,'Invalid range.'); }
     if (!object) fail(404,'Video unavailable. Please contact the researcher.');
     const partial=Boolean(range && object.range);
@@ -244,7 +249,7 @@ async function route(request, env) {
     const previous = await env.DB.prepare('SELECT revision FROM ratings WHERE rater_id=? AND clip_id=?').bind(current.rater_id,id).first();
     if ((previous?.revision || 0)!==data.expected_revision) fail(409,'A newer rating exists. Reload before editing.');
     const at=new Date().toISOString(), revision=data.expected_revision+1;
-    const payload={score:unscorable?null:data.score,unscorable,reason:unscorable?reason:'',confidence:data.confidence,notes,watched_seconds:data.watched_seconds,playback_rate:data.playback_rate,revision,updated_at:at};
+    const payload={score:unscorable?null:data.score,unscorable,reason:unscorable?reason:'',confidence:data.confidence,notes,watched_seconds:data.watched_seconds,playback_rate:data.playback_rate,revision,updated_at:at,media_revision:mediaRevision(clip)};
     const result=await env.DB.batch([
       env.DB.prepare('INSERT INTO ratings VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(rater_id,clip_id) DO UPDATE SET score=excluded.score,unscorable=excluded.unscorable,reason=excluded.reason,confidence=excluded.confidence,notes=excluded.notes,watched_seconds=excluded.watched_seconds,playback_rate=excluded.playback_rate,revision=excluded.revision,updated_at=excluded.updated_at WHERE ratings.revision=?')
         .bind(current.rater_id,id,payload.score,unscorable?1:0,payload.reason,data.confidence,notes,data.watched_seconds,data.playback_rate,revision,at,clip.version,data.expected_revision),

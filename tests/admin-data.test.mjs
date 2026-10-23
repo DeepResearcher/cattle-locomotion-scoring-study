@@ -4,6 +4,7 @@ import {selectResults,resultsSummary,ratingsCsv,ratingFields} from '../src/admin
 import {adminMessages} from '../src/admin-i18n.js';
 
 const fixture={study_id:'test',exported_at:'2026-10-22T12:00:00Z',selected_version:2,active_version:2,
+  media_releases:[{version:2,revision:'privacy-test',applied_at:'2026-10-23T12:00:00Z'}],
   clips:[{id:'one'},{id:'two'}],
   raters:[{id:'real',label:'Real',is_test:0,consent_at:'2026-10-22',active:1},{id:'preview',label:'Preview',is_test:1,consent_at:'2026-10-22',active:0},{id:'unused',is_test:0}],
   ratings:[{rater_id:'real',clip_id:'one',score:2,unscorable:0,updated_at:'2026-10-22T12:00:00Z'},
@@ -18,6 +19,7 @@ test('Research exports exclude test ratings, participants AND history; filters r
   assert.equal(selected.ratings.length,2);assert.equal(selected.history.length,1);
   assert.equal(selected.selected_version,2);assert.equal(selected.active_version,2);
   assert.deepEqual(selected.orders,[fixture.orders[0]]);
+  assert.deepEqual(selected.media_releases,fixture.media_releases);
   assert.equal(selected.raters.some(r=>r.id==='preview'),false);
   assert.equal(selected.includes_test_data,false);
   assert.equal(s.participants.length,1);assert.equal(s.completed,1);assert.equal(s.unscorable,1);
