@@ -190,9 +190,10 @@ async function route(request, env) {
     try { object = await env.MEDIA.get(id, range ? {range:request.headers} : undefined); }
     catch { fail(416,'Invalid range.'); }
     if (!object) fail(404,'Video unavailable. Please contact the researcher.');
-    const headers = new Headers({'Content-Type':id.endsWith('.mp4')?'video/mp4':'image/jpeg','Accept-Ranges':'bytes','Cache-Control':'private, no-store','Content-Length':String(object.range?.length ?? object.size)});
-    if (object.range) headers.set('Content-Range',`bytes ${object.range.offset}-${object.range.offset+object.range.length-1}/${object.size}`);
-    return new Response(request.method==='HEAD'?null:object.body,{status:object.range?206:200,headers});
+    const partial=Boolean(range && object.range);
+    const headers = new Headers({'Content-Type':id.endsWith('.mp4')?'video/mp4':'image/jpeg','Accept-Ranges':'bytes','Cache-Control':'private, no-store','Content-Length':String(partial?object.range.length:object.size)});
+    if (partial) headers.set('Content-Range',`bytes ${object.range.offset}-${object.range.offset+object.range.length-1}/${object.size}`);
+    return new Response(request.method==='HEAD'?null:object.body,{status:partial?206:200,headers});
   }
   const current = await session(request, env);
   if (env.STUDY_OPEN !== 'true' && !current.is_test) fail(503,'The study is paused.');

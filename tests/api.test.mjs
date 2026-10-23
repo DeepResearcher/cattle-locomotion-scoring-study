@@ -42,6 +42,11 @@ test('access control, blinded manifest, independent ratings, revisions and priva
     const bucket=await mf.getR2Bucket('MEDIA');await bucket.put(`${clips[0].id}.mp4`,new Uint8Array([1,2,3,4,5]));
     assert.equal((await call(`/media/${clips[0].id}.mp4`)).status,401);
     const media=JSON.parse((await call(`/ticket/${clips[0].id}`,{method:'POST',token:ta,data:{}})).body);
+    const full=await mf.dispatchFetch('https://api.example.org'+media.video);
+    assert.equal(full.status,200);assert.equal(full.headers.get('content-range'),null);
+    assert.deepEqual([...new Uint8Array(await full.arrayBuffer())],[1,2,3,4,5]);
+    const head=await mf.dispatchFetch('https://api.example.org'+media.video,{method:'HEAD'});
+    assert.equal(head.status,200);assert.equal(head.headers.get('content-length'),'5');assert.equal((await head.arrayBuffer()).byteLength,0);
     const range=await mf.dispatchFetch('https://api.example.org'+media.video,{headers:{Range:'bytes=1-3'}});
     assert.equal(range.status,206); assert.equal(range.headers.get('content-range'),'bytes 1-3/5'); assert.deepEqual([...new Uint8Array(await range.arrayBuffer())],[2,3,4]);
     const exported=JSON.parse((await call('/admin/export',{token:admin})).body);
